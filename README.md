@@ -1,17 +1,12 @@
 # Deoldify-onnx
 
-Option render factor only in commandline version
+Easy to install. 
+It runs on both CPU or Nvidia GPUs
 
-New models for use with render factor: 
-
+Render factor enabled onnx models: 
 https://drive.google.com/drive/folders/1bU9Zj7zGVEujIzvDTb1b9cyWU3s__WQR?usp=sharing
 
-Simple image and video colorization using onnx converted deoldify model.
-
-Easy to install. 
-It can be run on CPU or Nvidia GPU
-
-ffmpeg is required for video colorzation.
+TODO: Add models to hugging face
 
 ## For inference run:
 
@@ -24,7 +19,8 @@ Video:
 python video.py
 ```
 
-Both Scripts are interactive. So you can follow along the simple question prompts.
+Note: Render factor only works in CLI scripts. ffmpeg is required for video colorzation.
+Both scripts are interactive. So you can follow along the simple question prompts.
 
 ## Image examples:
 ![colorizer1](https://github.com/instant-high/deoldify-onnx/assets/77229558/171642dd-9034-4ca7-8d29-c07c6e5e9f0a)
