@@ -1,4 +1,4 @@
-# deoldify-onnx
+# Deoldify-onnx
 
 Option render factor only in commandline version
 
@@ -13,28 +13,26 @@ It can be run on CPU or Nvidia GPU
 
 ffmpeg is required for video colorzation.
 
-For inference run:
+## For inference run:
 
 Image:
-`python image.py `
-
+```
+python image.py
+```
 Video:
-`python video.py`
+```
+python video.py
+```
 
 Both Scripts are interactive. So you can follow along the simple question prompts.
 
-Image example:
+## Image examples:
 ![colorizer1](https://github.com/instant-high/deoldify-onnx/assets/77229558/171642dd-9034-4ca7-8d29-c07c6e5e9f0a)
 
 
 https://github.com/instant-high/deoldify-onnx/assets/77229558/3824e96d-fffc-494e-8ce1-193e6a77c8b6
 
 https://github.com/instant-high/deoldify-onnx/assets/77229558/543e1dd1-27da-4c63-95a9-9c0696adea51
-
-
-original deoldify:
-
-https://github.com/jantic/DeOldify
 
 
 ## Why Three Models?
@@ -51,3 +49,11 @@ Video - This model is optimized for smooth, consistent and flicker-free video. T
 Because the training of the artistic and stable models was done before the "inflection point" of NoGAN training described in "What is NoGAN???" was discovered, I believe this amount of training on them can be knocked down considerably. As far as I can tell, the models were stopped at "good points" that were well beyond where productive training was taking place. I'll be looking into this in the future.
 
 Ideally, eventually these three models will be consolidated into one that has all these good desirable unified. I think there's a path there, but it's going
+
+
+## Source Repos
+Original Deoldify:
+https://github.com/jantic/DeOldify
+
+Forked Deoldify:
+https://github.com/instant-high/deoldify-onnx
