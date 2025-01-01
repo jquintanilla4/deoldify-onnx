@@ -1,93 +1,127 @@
 import os
 import sys
 import cv2
-import numpy as np
+# import numpy as np
 import subprocess
 import platform
-
-from argparse import ArgumentParser
 from tqdm import tqdm
-
 import onnxruntime as rt
-rt.set_default_logger_severity(3)
-print("Available Providers:", rt.get_available_providers())
-print("CUDA Available:", 'CUDAExecutionProvider' in rt.get_available_providers())
 
-parser = ArgumentParser()
-parser.add_argument("--source", help="path to source video")
-parser.add_argument("--result", help="path to result video")
-parser.add_argument("--audio", default=False, action="store_true", help="Keep audio")
-parser.add_argument("--render_factor", type=int, default=8, help=" - ")
-opt = parser.parse_args()
+rt.set_default_logger_severity(3) # Set logging level to 3 (INFO)
+
+def init_onnx():
+    rt.set_default_logger_severity(3)
+    print("Available Providers:", rt.get_available_providers())
+    print("CUDA Available:", 'CUDAExecutionProvider' in rt.get_available_providers())
 
 
-'''
-The render factor determines the resolution at which the image is rendered for inference.
-When set at a low value, the process is faster and the colors tend to be more vibrant
-but the results are less stable.
-original torch model accepts input divisible by 16
-ONNX models currently accept only divisible by 32  
-'''
-
-#
-render_factor = opt.render_factor * 32
-#
-
-# old model - you cannot set render_factor
-#from color.deoldify_fp16 import DEOLDIFY
-#colorizer = DEOLDIFY(model_path="color/deoldify_fp16.onnx", device="cpu")
-#from color.deoldify import DEOLDIFY
-#colorizer = DEOLDIFY(model_path="color/deoldify.onnx", device="cuda")
-
-# new onnx models - render_factor - dynamic axes input:
-# from color.deoldify import DEOLDIFY
-# colorizer = DEOLDIFY(model_path="color/ColorizeArtistic_dyn_fp16.onnx", device="cuda")
-from color.deoldify import DEOLDIFY
-colorizer = DEOLDIFY(model_path="color/ColorizeArtistic_dyn.onnx", device="cuda")
-
-
-video = cv2.VideoCapture(opt.source)
-
-w = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
-h = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
-n_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))    
-fps = video.get(cv2.CAP_PROP_FPS)
-
-if opt.audio:
-    writer = cv2.VideoWriter('temp.mp4',cv2.VideoWriter_fourcc('m','p','4','v'), fps, (w, h))
-else:
-    writer = cv2.VideoWriter(opt.result,cv2.VideoWriter_fourcc('m','p','4','v'), fps, (w, h))
-
-for frame_idx in tqdm(range(n_frames)):
-
-    ret, frame = video.read()
-    if not ret:
-        break
-
-    result = colorizer.colorize(frame, render_factor)
+def get_user_inputs():
+    print("\n=== Video Colorization Settings ===")
+    source = input("Enter path to source video: ").strip('"')
     
-    writer.write(result)
-    # cv2.imshow("Result", result)  # Comment out or remove this line
-    # k = cv2.waitKey(1)           # Comment out or remove this line
-    # if k == 27:                  # Comment out or remove this line
-    #     writer.release()         # Comment out or remove this line
-    #     break                    # Comment out or remove this line
+    # Generate output filename by adding "-colorized" before the extension
+    base_path = os.path.splitext(source)[0]
+    extension = os.path.splitext(source)[1]
+    result = f"{base_path}-colorized{extension}"
+    print(f"Output will be saved as: {result}")
+    
+    audio = input("Keep audio? (yes/no): ").lower().startswith('y')
+    
+    try: # Validate render factor
+        render_factor = int(input("Render factor (recommended 8, must be divisible by 32): ").strip() or "8")
+        if render_factor <= 0:
+            print("Error: Render factor must be positive.")
+            return
+    except ValueError:
+        print("Error: Please enter a valid number for render factor.")
+        return
+    
+    return source, result, audio, render_factor
 
-# Add these lines to properly close the video objects
-writer.release()
-video.release()
 
-if opt.audio:
-    # Check if source video has audio stream
-    probe_command = f'ffprobe -i "{opt.source}" -show_streams -select_streams a -loglevel error'
+def process_video(source, result, audio, render_factor, colorizer):
+    if not os.path.exists(source):
+        print(f"Error: Source video file '{source}' not found!")
+        sys.exit(1)
+
+    video = cv2.VideoCapture(source)
+    w = int(video.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    n_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))    
+    fps = video.get(cv2.CAP_PROP_FPS)
+
+    print(f"\nProcessing video: {w}x{h} at {fps}fps ({n_frames} frames)")
+
+    output_path = 'temp.mp4' if audio else result
+    writer = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc('m','p','4','v'), fps, (w, h))
+
+    print("\nColorizing video frames...")
+    for frame_idx in tqdm(range(n_frames)):
+        ret, frame = video.read()
+        if not ret:
+            break
+        result_frame = colorizer.colorize(frame, render_factor)
+        writer.write(result_frame)
+
+    writer.release()
+    video.release()
+    return output_path
+
+
+def process_audio(source, result, temp_video):
+    print("\nProcessing audio...")
+    probe_command = f'ffprobe -i "{source}" -show_streams -select_streams a -loglevel error'
     has_audio = subprocess.call(probe_command, shell=platform.system() != 'Windows') == 0
 
     if has_audio:
-        # lossless remuxing audio/video
-        command = 'ffmpeg -y -vn -i ' + '"' + opt.source + '"' + ' -an -i ' + 'temp.mp4' + ' -c:v copy -acodec libmp3lame -ac 2 -ar 44100 -ab 128000 -map 0:1 -map 1:0 -shortest ' + '"' + opt.result + '"'
+        print("Merging audio with colorized video...")
+        command = f'ffmpeg -y -vn -i "{source}" -an -i {temp_video} -c:v copy -acodec libmp3lame -ac 2 -ar 44100 -ab 128000 -map 0:1 -map 1:0 -shortest "{result}"'
         subprocess.call(command, shell=platform.system() != 'Windows')
-        os.remove('temp.mp4')
+        os.remove(temp_video)
     else:
-        # If no audio, just rename temp.mp4 to final result
-        os.rename('temp.mp4', opt.result)
+        print("No audio stream found in source video")
+        os.rename(temp_video, result)
+
+
+def main():
+    # Initialize ONNX runtime
+    init_onnx()
+
+    # Get user inputs
+    source, result, audio, render_factor = get_user_inputs()
+
+    '''
+    The render factor determines the resolution at which the image is rendered for inference.
+    When set at a low value, the process is faster and the colors tend to be more vibrant
+    but the results are less stable.
+    Original torch model accepts input divisible by 16
+    ONNX models currently accept only divisible by 32  
+    '''
+    multi_render_factor = render_factor * 32
+
+    # OLD ONNX MODELS - you cannot set render_factor
+    #from color.deoldify_fp16 import DEOLDIFY
+    #colorizer = DEOLDIFY(model_path="color/deoldify_fp16.onnx", device="cpu")
+    #from color.deoldify import DEOLDIFY
+    #colorizer = DEOLDIFY(model_path="color/deoldify.onnx", device="cuda")
+
+    # NEW ONNX MODELS - render_factor - dynamic axes input:
+    # from color.deoldify import DEOLDIFY
+    # colorizer = DEOLDIFY(model_path="color/ColorizeArtistic_dyn_fp16.onnx", device="cuda")
     
+    # Initialize colorizer
+    from color.deoldify import DEOLDIFY
+    colorizer = DEOLDIFY(model_path="color/ColorizeArtistic_dyn.onnx", device="cuda")
+
+    # Process video
+    output_path = process_video(source, result, audio, multi_render_factor, colorizer)
+
+    # Handle audio if needed
+    if audio:
+        process_audio(source, result, output_path)
+
+    print(f"\nProcessing complete! Result saved to: {result}")
+
+
+if __name__ == "__main__":
+    main()
